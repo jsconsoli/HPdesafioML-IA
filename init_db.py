@@ -2,8 +2,7 @@
 
 import argparse
 
-from gpu_assistant.config import get_db_path
-from gpu_assistant.database import get_summary, initialize_db
+from gpu_assistant.database import GpuDatabase
 
 
 def main() -> None:
@@ -14,9 +13,10 @@ def main() -> None:
         help="Restaura a disponibilidade inicial dos cinco modelos do enunciado.",
     )
     args = parser.parse_args()
-    initialize_db(reset_availability=args.reset)
-    summary = get_summary()
-    print(f"Banco pronto: {get_db_path()}")
+    database = GpuDatabase()
+    database.initialize_db(reset_availability=args.reset)
+    summary = database.get_summary()
+    print(f"Banco pronto: {database.db_path}")
     print(f"{summary['modelos']} modelos; {summary['total_disponivel']} unidades disponíveis.")
 
 

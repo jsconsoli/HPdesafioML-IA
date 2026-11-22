@@ -30,20 +30,31 @@ São inicialmente **19 GPUs disponíveis** distribuídas em cinco modelos. A ini
 ## Como funciona
 
 1. O usuário faz uma pergunta no Streamlit ou no terminal.
-2. O modelo recebe a pergunta e as descrições de três ferramentas autorizadas.
+2. O modelo recebe o histórico, a última mensagem do usuário e as descrições das ferramentas autorizadas. Ele decide se precisa consultar dados.
 3. Quando o modelo solicita uma função, o Python valida seu nome e argumentos.
 4. A função consulta o SQLite em modo **somente leitura**.
-5. O resultado volta ao LLM, que elabora a resposta.
+5. O resultado volta ao modelo. Se houver erro na chamada, o agente envia o erro e exemplos da ferramenta para orientar até três novas tentativas por pergunta.
+6. O modelo escreve a mensagem e usa `conversar_com_cliente` para entregá-la. A mensagem pode responder à consulta, apresentar o assistente ou pedir esclarecimento.
 
-Ferramentas disponíveis:
+Durante uma nova tentativa, o agente pode decodificar uma lista JSON de nomes que o Ollama enviou dentro de uma string. A ferramenta valida os nomes e filtros após a conversão, e os argumentos normalizados aparecem no resultado registrado no log.
+
+Quando falta contexto, o agente pode pedir esclarecimento antes de consultar o SQLite. Para um pedido como “histórico”, ele pergunta se o usuário quer rever as consultas da sessão ou saber como a disponibilidade mudou. A base contém a disponibilidade atual. Uma verificação de suficiência exige uma quantidade pedida pelo usuário.
+
+Uma lista de GPUs disponíveis inclui modelos com pelo menos uma unidade livre. As comparações de maior ou menor memória e maior disponibilidade incluem todos os empates.
+
+As consultas ficam agrupadas em `GpuQueryTools`. A descrição do grupo orienta o modelo a usar a consulta pertinente quando o usuário pedir dados sobre GPUs. `conversar_com_cliente` é uma ferramenta geral de conversa.
+
+Ferramentas disponíveis
 
 | Ferramenta | Descrição |
 | --- | --- |
-| `consultar_gpus(modelos=None)` | Retorna modelo, quantidade disponível e memória por GPU; aceita vários modelos. |
+| `consultar_gpus` | Retorna modelo, quantidade disponível e memória por GPU. Use `modelo` para um nome e `modelos` para uma lista. Por memória, use `memoria_exata_gb` ou `memoria_minima_gb`. |
 | `verificar_disponibilidade(modelo, quantidade)` | Compara a quantidade solicitada com a quantidade disponível no banco. |
 | `consultar_resumo()` | Retorna número de modelos e soma das unidades disponíveis. |
+| `comparar_gpus(criterio, somente_disponiveis=False)` | Retorna os modelos com maior ou menor memória por unidade ou maior ou menor quantidade disponível, incluindo empates. |
+| `conversar_com_cliente(mensagem)` | Encerra o uso de ferramentas no turno e entrega a mensagem escrita pelo modelo. |
 
-O modelo **não acessa diretamente o arquivo do SQLite**; a aplicação executa as funções permitidas. Se o LLM responder uma pergunta sem realizar nenhuma consulta, o agente não exibe essa resposta factual não verificada.
+Somente a aplicação executa as funções autorizadas sobre o SQLite. O prompt base define o papel do assistente e como usar o histórico. Os esquemas enviados no campo `tools` descrevem quando consultar e como usar os resultados.
 
 ## Pré-requisitos
 
@@ -126,6 +137,19 @@ Para comparar modelos sem editar `.env`:
 python chat_cli.py --model llama3.2:3b
 ```
 
+### Consultar o log das conversas
+
+O terminal e o Streamlit gravam as chamadas ao Ollama em `conversas.log`, na raiz do projeto. O arquivo é criado na primeira chamada e acumula registros em UTF-8, com um objeto JSON por linha. O Git ignora esse arquivo.
+
+- `request` contém o modelo, o prompt de sistema, o histórico, as definições das ferramentas, os resultados já consultados e as opções enviadas ao Ollama.
+- `response` contém a resposta original do Ollama, inclusive chamadas de ferramentas com seus argumentos, antes de o agente decidir o que mostrar no chat. O mesmo `request_id` liga a resposta à requisição.
+
+Para acompanhar as últimas chamadas pelo PowerShell, depois de fazer uma pergunta:
+
+```powershell
+Get-Content -Encoding UTF8 .\conversas.log -Tail 6 -Wait
+```
+
 ## Simular alteração de disponibilidade
 
 Somente o script externo modifica a coluna `quantidade_disponivel`. Por exemplo:
@@ -183,7 +207,7 @@ hp-gpu-assistant/
 - **Somente leitura no agente:** operações de escrita ficam em um script separado.
 - **Sem reservas:** não existe no enunciado uma regra de reserva, agenda ou utilização; não fabricamos esses dados.
 - **Interface simples:** o frontend é complementar à integração com o modelo.
-- **Garantias:** a aplicação bloqueia respostas factuais sem uso de ferramenta, mas ainda é necessário avaliar se a resposta textual de um LLM real reproduz fielmente os dados devolvidos. Uma melhoria futura é renderizar certas respostas determinísticas diretamente no Python.
+- **Respostas factuais:** o LLM interpreta a pergunta, seleciona as consultas e escreve a mensagem usando os dados retornados.
 
 ## Referências técnicas
 
