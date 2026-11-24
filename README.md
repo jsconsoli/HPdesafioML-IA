@@ -41,6 +41,10 @@ O prompt define o papel do assistente, o uso do histórico e o limite sobre rese
 
 É preciso ter **Python 3.10 ou superior** e [Ollama](https://ollama.com/download) instalado. O [Qwen3 4B](https://ollama.com/library/qwen3:4b) usa a memória e o processamento do computador local. A velocidade varia conforme o hardware.
 
+### Ambiente usado nos testes locais
+
+O Qwen3 4B foi testado no **Windows 11 25H2** com **Intel Core i7-11800H**, **16 GB de RAM**, **NVIDIA GeForce GTX 1650 com 4 GB de VRAM** e **Ollama 0.40.16**. Nessa máquina, o Ollama distribuiu o modelo entre a CPU e a GPU.
+
 ### 1. Prepare o ambiente
 
 Na raiz do repositório clonado, use os comandos do seu sistema.
