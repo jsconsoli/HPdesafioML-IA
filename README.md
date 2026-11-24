@@ -1,11 +1,11 @@
-# GPU Assistant — Desafio HP 2026
+# GPU Assistant
 
-Projeto desenvolvido para um desafio técnico de estágio em Machine Learning e IA na HP. O agente responde, em linguagem natural, a perguntas sobre a disponibilidade de GPUs em uma infraestrutura simulada. É possível consultar modelos, memória por unidade, estoque por modelo, totais e suficiência para uma quantidade solicitada.
+ O agente responde, em linguagem natural, a perguntas sobre a disponibilidade de GPUs em uma infraestrutura simulada. É possível consultar modelos, memória por unidade, estoque por modelo, totais e suficiência para uma quantidade solicitada.
 
 ## Decisões do projeto
 
-- **Python e SQLite.** Python concentra a integração com o modelo, a validação dos argumentos e a execução das consultas. Com cinco modelos de GPU, SQLite oferece persistência em um arquivo local e dispensa a configuração de um servidor PostgreSQL.
-- **Ollama e execução local.** Consideramos a API da OpenAI e escolhemos rodar o modelo no computador disponível para o desafio. Começamos com o Llama 3.2 3B e passamos para o **Qwen3 4B (`qwen3:4b`)** após observar, nos testes locais, respostas mais coerentes a saudações e perguntas sobre o papel do assistente. O modelo continua configurável para comparar a seleção de ferramentas e o tempo de resposta.
+- **Python e SQLite.** Python concentra a integração com o modelo, a validação dos argumentos e a execução das consultas. Com cinco modelos de GPU, SQLite oferece persistência em um arquivo local.
+- **Ollama e execução local.** Consideramos a API da OpenAI e escolhemos rodar um modelo local. Começamos com o Llama 3.2 3B e passamos para o **Qwen3 4B (`qwen3:4b`)** após observar, nos testes locais, respostas mais coerentes a saudações e perguntas sobre o papel do assistente. O modelo continua configurável para comparar a seleção de ferramentas e o tempo de resposta.
 - **Estoque somente leitura para o agente.** O Python abre o SQLite em modo de leitura nas consultas. Um script separado altera a quantidade disponível para demonstrar como o agente responde a mudanças no estoque.
 - **Duas interfaces para o mesmo agente.** O Streamlit oferece chat no navegador e mostra o modelo em uso e os totais na barra lateral. A CLI permite testar o mesmo fluxo pelo terminal, inclusive com outro modelo já baixado.
 
