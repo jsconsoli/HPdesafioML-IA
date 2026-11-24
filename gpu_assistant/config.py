@@ -3,11 +3,12 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(PROJECT_ROOT / ".env", override=False)
+ENV_PATH = PROJECT_ROOT / ".env"
+load_dotenv(ENV_PATH, override=False)
 
 
 def get_db_path() -> Path:
@@ -17,7 +18,9 @@ def get_db_path() -> Path:
 
 
 def get_model_name() -> str:
-    return os.getenv("OLLAMA_MODEL", "llama3.2:3b").strip()
+    # Leia a configuração do projeto a cada rerun do Streamlit.
+    configured = (dotenv_values(ENV_PATH).get("OLLAMA_MODEL") or "").strip()
+    return configured or os.getenv("OLLAMA_MODEL", "").strip() or "qwen3:4b"
 
 
 def get_ollama_host() -> str:

@@ -10,13 +10,23 @@ from gpu_assistant.tools import GpuQueryTools
 
 def main() -> None:
     st.set_page_config(page_title="GPU Assistant", page_icon="🖥️", layout="centered")
-    st.title("GPU Assistant")
-    st.caption("Assistente de consultas à disponibilidade simulada de GPUs")
-
+    model = get_model_name()
     with st.sidebar:
-        st.header("Configurações")
-        model = st.text_input("Modelo do Ollama", value=get_model_name())
-        st.caption("Altere o nome para comparar modelos instalados no Ollama.")
+        st.title("GPU Assistant", anchor=False)
+        st.caption("Assistente de consultas à disponibilidade simulada de GPUs")
+        st.html(
+            """
+            <style>
+                .st-key-sidebar-info [data-testid="stCaptionContainer"] {
+                    color: inherit;
+                    color: light-dark(currentColor, #fff);
+                    opacity: 1;
+                }
+            </style>
+            """
+        )
+        sidebar_info = st.container(key="sidebar-info")
+        sidebar_info.caption(f"Modelo em uso (Ollama): {model}")
         if st.button("Limpar conversa"):
             st.session_state.pop("chat", None)
             st.session_state.pop("agent_history", None)
@@ -38,9 +48,8 @@ def main() -> None:
         st.error(f"Não foi possível consultar a base de GPUs: {exc}")
         st.stop()
 
-    left, right = st.columns(2)
-    left.metric("Modelos cadastrados", summary["modelos"])
-    right.metric("GPUs disponíveis", summary["total_disponivel"])
+    sidebar_info.caption(f"Modelos cadastrados: {summary['modelos']}")
+    sidebar_info.caption(f"GPUs disponíveis: {summary['total_disponivel']}")
 
     st.session_state.setdefault("chat", [])
     st.session_state.setdefault("agent_history", [])
@@ -48,7 +57,29 @@ def main() -> None:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    prompt = st.chat_input("Pergunte sobre modelos, memória ou disponibilidade...")
+    composer = st
+    # No primeiro envio, o valor recebido já permite renderizar o campo no rodapé.
+    if not st.session_state["chat"] and not st.session_state.get("chat_prompt"):
+        composer = st.container(key="chat-welcome")
+        composer.html(
+            """
+            <style>
+                .stMainBlockContainer:has(.st-key-chat-welcome) {
+                    margin-block: auto;
+                    padding-block: 4rem;
+                }
+                .st-key-chat-welcome h2 {
+                    text-align: center;
+                    padding: 0;
+                }
+            </style>
+            <h2>O que gostaria de saber sobre GPUs hoje?</h2>
+            """
+        )
+
+    prompt = composer.chat_input(
+        "Pergunte sobre modelos, memória ou disponibilidade...", key="chat_prompt"
+    )
     if prompt:
         st.session_state["chat"].append({"role": "user", "content": prompt})
         with st.chat_message("user"):

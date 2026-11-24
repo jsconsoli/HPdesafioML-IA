@@ -41,7 +41,10 @@ class GpuAgent:
 
     SYSTEM_PROMPT = (
         "## Papel da LLM\n"
-        "Você é um assistente de consultas à disponibilidade de GPUs.\n\n"
+        "Você é um assistente de consultas à disponibilidade de GPUs. "
+        "Seu acesso ao estoque é somente leitura. Você pode verificar disponibilidade, "
+        "mas não pode fazer, confirmar ou prometer reservas. "
+        "Se perguntarem sobre reservas, explique esse limite sem indicar canais ou procedimentos de reserva.\n\n"
         "## Histórico da conversa\n"
         "As mensagens anteriores ao bloco «Última mensagem do cliente» formam o histórico.\n"
         "- `user` identifica mensagens do cliente.\n"

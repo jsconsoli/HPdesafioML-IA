@@ -129,7 +129,7 @@ class GpuQueryTools:
     def _build_schemas(self) -> dict:
         schemas = {
             "consultar_gpus": _tool_schema(
-                'Use para listar modelos ou obter a memória por unidade e a quantidade livre de cada modelo. '
+                'Lista modelos de GPU e retorna a memória por unidade e a quantidade livre de cada modelo. '
                 'Use {} para listar o cadastro completo. Para listar todos os modelos com unidades livres, '
                 'use {"somente_disponiveis":true}. Omita os filtros por nome e memória nessas listagens. '
                 'Preencha modelo ou modelos apenas com os nomes pedidos pelo usuário. '
@@ -177,10 +177,10 @@ class GpuQueryTools:
                 ("criterio",),
             ),
             "verificar_disponibilidade": _tool_schema(
-                'Use somente para verificar se há unidades suficientes quando o usuário informa '
-                'um modelo específico e quantas unidades precisa. Para consultar quantas estão livres '
-                'ou buscar GPUs com determinada memória em GB, use consultar_gpus. '
-                'Para pedir duas A100, use {"modelo":"A100","quantidade":2}.',
+                'Responde se há pelo menos a quantidade solicitada de um modelo de GPU. '
+                'Use para confirmar se uma quantidade específica de um modelo está disponível. '
+                'Extraia o modelo e a quantidade solicitada da mensagem ou do histórico. '
+                'Consulta o estoque atual e retorna quantas unidades estão livres e se o pedido pode ser atendido.',
                 {
                     "modelo": {"type": "string", "description": 'Nome do modelo solicitado, como "A100".'},
                     "quantidade": {

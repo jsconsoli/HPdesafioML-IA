@@ -1,217 +1,109 @@
 # GPU Assistant — Desafio HP 2026
 
-Assistente conversacional em Python para **consultar a disponibilidade simulada de GPUs**. Utiliza SQLite como fonte de dados, funções de consulta expostas ao LLM por **Tool Calling**, Ollama para executar modelos locais e uma interface opcional em Streamlit.
+Projeto desenvolvido para um desafio técnico de estágio em Machine Learning e IA na HP. O agente responde, em linguagem natural, a perguntas sobre a disponibilidade de GPUs em uma infraestrutura simulada. É possível consultar modelos, memória por unidade, estoque por modelo, totais e suficiência para uma quantidade solicitada.
 
-> Projeto-base em desenvolvimento. O modelo de linguagem não foi definido como vencedor: seu nome é configurável para permitir experimentos comparativos. O funcionamento com um LLM real deve ser validado depois da escolha dos candidatos.
+## Decisões do projeto
 
-## Funcionalidades
+- **Python e SQLite.** Python concentra a integração com o modelo, a validação dos argumentos e a execução das consultas. Com cinco modelos de GPU, SQLite oferece persistência em um arquivo local e dispensa a configuração de um servidor PostgreSQL.
+- **Ollama e execução local.** Consideramos a API da OpenAI e escolhemos rodar o modelo no computador disponível para o desafio. Começamos com o Llama 3.2 3B e passamos para o **Qwen3 4B (`qwen3:4b`)** após observar, nos testes locais, respostas mais coerentes a saudações e perguntas sobre o papel do assistente. O modelo continua configurável para comparar a seleção de ferramentas e o tempo de resposta.
+- **Estoque somente leitura para o agente.** O Python abre o SQLite em modo de leitura nas consultas. Um script separado altera a quantidade disponível para demonstrar como o agente responde a mudanças no estoque.
+- **Duas interfaces para o mesmo agente.** O Streamlit oferece chat no navegador e mostra o modelo em uso e os totais na barra lateral. A CLI permite testar o mesmo fluxo pelo terminal, inclusive com outro modelo já baixado.
 
-- Listar modelos de GPUs cadastrados.
-- Consultar memória **por GPU** e quantidade **disponível agora**, para um ou vários modelos.
-- Verificar se existe a quantidade solicitada de um modelo.
-- Consultar o número de modelos cadastrados e o total **disponível** de unidades.
-- Demonstrar a atualização da disponibilidade com um script externo ao agente.
-- Trocar o modelo de linguagem sem modificar o código-fonte.
+## Dados e escopo
 
-**Escopo:** os dados não incluem quantidade física total, GPUs em uso, servidores, reservas ou disponibilidade futura. O agente nunca recebe ferramentas para modificar o banco de dados.
+O banco armazena o nome do modelo, a memória por GPU e a quantidade de unidades livres naquele momento. A quantidade física total, as GPUs em uso, as reservas e a disponibilidade futura ficam fora do escopo. Confirmar que há unidades suficientes significa verificar o estoque atual.
 
-## Dados simulados
-
-| GPU | Disponíveis inicialmente | Memória por GPU |
+| GPU | Memória por unidade | Unidades livres inicialmente |
 | --- | ---: | ---: |
-| NVIDIA A100 | 4 | 80 GB |
-| NVIDIA L40S | 6 | 48 GB |
-| NVIDIA RTX 4090 | 3 | 24 GB |
-| NVIDIA H100 | 2 | 80 GB |
-| NVIDIA A40 | 4 | 48 GB |
+| NVIDIA A100 | 80 GB | 4 |
+| NVIDIA L40S | 48 GB | 6 |
+| NVIDIA RTX 4090 | 24 GB | 3 |
+| NVIDIA H100 | 80 GB | 2 |
+| NVIDIA A40 | 48 GB | 4 |
 
-São inicialmente **19 GPUs disponíveis** distribuídas em cinco modelos. A inicialização usa esses valores para reproduzir a tabela do enunciado.
+A base inicial tem **cinco modelos e 19 unidades livres**.
 
-## Como funciona
+## Como o agente funciona
 
-1. O usuário faz uma pergunta no Streamlit ou no terminal.
-2. O modelo recebe o histórico, a última mensagem do usuário e as descrições das ferramentas autorizadas. Ele decide se precisa consultar dados.
-3. Quando o modelo solicita uma função, o Python valida seu nome e argumentos.
-4. A função consulta o SQLite em modo **somente leitura**.
-5. O resultado volta ao modelo. Se houver erro na chamada, o agente envia o erro e exemplos da ferramenta para orientar até três novas tentativas por pergunta.
-6. O modelo escreve a mensagem e usa `conversar_com_cliente` para entregá-la. A mensagem pode responder à consulta, apresentar o assistente ou pedir esclarecimento.
+O [agente Python](gpu_assistant/agent.py) envia ao Ollama o contexto da conversa e os esquemas das ferramentas autorizadas. Quando o modelo pede uma consulta, o agente valida o nome e os argumentos, executa a função e devolve o resultado ao modelo. Se a consulta falhar, o agente envia um diagnóstico e permite até três tentativas de correção no turno. A resposta pode vir como texto ou pela ferramenta `conversar_com_cliente`.
 
-Durante uma nova tentativa, o agente pode decodificar uma lista JSON de nomes que o Ollama enviou dentro de uma string. A ferramenta valida os nomes e filtros após a conversão, e os argumentos normalizados aparecem no resultado registrado no log.
+O prompt define o papel do assistente, o uso do histórico e o limite sobre reservas. As [descrições das ferramentas](gpu_assistant/tools.py) especificam o que cada função recebe e devolve. Essa separação permite ajustar a seleção de ferramentas sem alterar as consultas ao banco.
 
-Quando falta contexto, o agente pode pedir esclarecimento antes de consultar o SQLite. Para um pedido como “histórico”, ele pergunta se o usuário quer rever as consultas da sessão ou saber como a disponibilidade mudou. A base contém a disponibilidade atual. Uma verificação de suficiência exige uma quantidade pedida pelo usuário.
-
-Uma lista de GPUs disponíveis inclui modelos com pelo menos uma unidade livre. As comparações de maior ou menor memória e maior disponibilidade incluem todos os empates.
-
-As consultas ficam agrupadas em `GpuQueryTools`. A descrição do grupo orienta o modelo a usar a consulta pertinente quando o usuário pedir dados sobre GPUs. `conversar_com_cliente` é uma ferramenta geral de conversa.
-
-Ferramentas disponíveis
-
-| Ferramenta | Descrição |
+| Ferramenta | Finalidade |
 | --- | --- |
-| `consultar_gpus` | Retorna modelo, quantidade disponível e memória por GPU. Use `modelo` para um nome e `modelos` para uma lista. Por memória, use `memoria_exata_gb` ou `memoria_minima_gb`. |
-| `verificar_disponibilidade(modelo, quantidade)` | Compara a quantidade solicitada com a quantidade disponível no banco. |
-| `consultar_resumo()` | Retorna número de modelos e soma das unidades disponíveis. |
-| `comparar_gpus(criterio, somente_disponiveis=False)` | Retorna os modelos com maior ou menor memória por unidade ou maior ou menor quantidade disponível, incluindo empates. |
-| `conversar_com_cliente(mensagem)` | Encerra o uso de ferramentas no turno e entrega a mensagem escrita pelo modelo. |
+| `consultar_gpus` | Lista modelos ou retorna memória por unidade e quantidade livre por modelo. Aceita filtros por nome, memória ou presença de unidades livres. |
+| `verificar_disponibilidade` | Recebe um modelo e uma quantidade. Retorna o número de unidades livres e `atende_solicitacao`, que indica se há pelo menos a quantidade pedida. |
+| `consultar_resumo` | Conta os modelos cadastrados e soma as unidades livres. |
+| `comparar_gpus` | Encontra a maior ou a menor memória por unidade, ou a maior ou a menor disponibilidade, incluindo empates. |
+| `conversar_com_cliente` | Entrega uma mensagem, como uma saudação, uma resposta final ou um pedido de esclarecimento. |
 
-Somente a aplicação executa as funções autorizadas sobre o SQLite. O prompt base define o papel do assistente e como usar o histórico. Os esquemas enviados no campo `tools` descrevem quando consultar e como usar os resultados.
+## Como executar
 
-## Pré-requisitos
+É preciso ter **Python 3.10 ou superior** e [Ollama](https://ollama.com/download) instalado. O [Qwen3 4B](https://ollama.com/library/qwen3:4b) usa a memória e o processamento do computador local. A velocidade varia conforme o hardware.
 
-- Python **3.10 ou superior** (recomendado 3.11 ou 3.12).
-- [Ollama](https://ollama.com/download) instalado e em execução, para o chat com LLM local.
-- Um modelo **compatível com Tool Calling** baixado no Ollama.
-- Memória RAM/VRAM suficiente para o modelo escolhido. Uma GPU dedicada não é obrigatória para todos os modelos, mas usar apenas CPU pode ser mais lento.
+### 1. Prepare o ambiente
 
-**Atenção:** o modelo é executado no computador da pessoa que testa a aplicação; o repositório Git não contém os pesos do modelo. Os testes automatizados não precisam do Ollama.
+Na raiz do repositório clonado, use os comandos do seu sistema.
 
-## Instalação
-
-Abra um terminal na pasta do projeto e crie um ambiente virtual.
-
-No Windows (PowerShell):
+**Windows (PowerShell)**
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-No Linux/macOS:
+**Linux ou macOS**
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Inicialize os cinco modelos do enunciado:
+### 2. Baixe o modelo e inicialize o banco
+
+Com o Ollama em execução, rode:
 
 ```bash
+ollama pull qwen3:4b
 python init_db.py
 ```
 
-Esse comando é idempotente: não sobrescreve uma disponibilidade já alterada. Para restaurar as disponibilidades iniciais dos cinco modelos:
+Se o serviço do Ollama estiver parado, inicie `ollama serve` em outro terminal. `python init_db.py` preserva as quantidades já atualizadas. `python init_db.py --reset` restaura as quantidades iniciais dos cinco modelos.
+
+O `.env.example` já configura `OLLAMA_MODEL=qwen3:4b`, `OLLAMA_HOST=http://localhost:11434` e `GPU_DB_PATH=data/gpus.sqlite3`. Para trocar de modelo, baixe-o pelo Ollama e edite `OLLAMA_MODEL` no `.env`. O valor no arquivo tem prioridade para a seleção do modelo, e a CLI aceita a opção explícita `--model <nome-do-modelo>`.
+
+### 3. Abra o chat
+
+**No navegador**, execute o Streamlit com o Python do ambiente virtual e abra a URL exibida no terminal.
 
 ```bash
-python init_db.py --reset
+python -m streamlit run app.py
 ```
 
-### Configurar um LLM
-
-No arquivo `.env`, configure:
-
-```dotenv
-OLLAMA_MODEL=llama3.2:3b
-OLLAMA_HOST=http://localhost:11434
-GPU_DB_PATH=data/gpus.sqlite3
-```
-
-`llama3.2:3b` é **apenas uma opção inicial para teste**, não o modelo final escolhido para a entrega. É possível usar outro modelo compatível com ferramentas, alterando `OLLAMA_MODEL` ou o campo de modelo na interface.
-
-Com Ollama instalado, baixe o modelo que configurou, por exemplo:
-
-```bash
-ollama pull llama3.2:3b
-```
-
-No Windows, o Ollama costuma permanecer aberto em segundo plano após a instalação. No Linux, se o serviço não estiver rodando, execute `ollama serve` em outro terminal.
-
-### Executar a interface web
-
-```bash
-streamlit run app.py
-```
-
-### Ou conversar pelo terminal
+**No terminal**, digite `sair` para encerrar o chat.
 
 ```bash
 python chat_cli.py
 ```
 
-Para comparar modelos sem editar `.env`:
+## Como validar o comportamento
+
+Comece com “Quais GPUs estão disponíveis?”. Em seguida, compare “Quantas A100 estão livres?” com “Tem duas A100 livres?”. A primeira pergunta pede o total do modelo. A segunda verifica se o estoque atende a uma quantidade específica. Pergunte “E se forem cinco?” no mesmo chat para testar o uso do histórico. Para conferir o escopo, pergunte se o assistente pode reservar uma GPU.
+
+Para simular uma mudança, rode o comando abaixo em outro terminal com o ambiente virtual ativo. Ele define a disponibilidade da A100 em duas unidades. Depois, pergunte novamente pelo total de A100 livres.
 
 ```bash
-python chat_cli.py --model llama3.2:3b
+python update_availability.py A100 2
 ```
 
-### Consultar o log das conversas
+As duas interfaces registram requisições e respostas do Ollama em `conversas.log`, na raiz do projeto. Os registros em JSON incluem o modelo, o histórico enviado, as chamadas de ferramentas, os argumentos e as métricas retornadas pelo Ollama. Cada par de requisição e resposta compartilha o mesmo `request_id`. Nos testes manuais, esse log permite conferir se uma resposta correta veio da ferramenta esperada.
 
-O terminal e o Streamlit gravam as chamadas ao Ollama em `conversas.log`, na raiz do projeto. O arquivo é criado na primeira chamada e acumula registros em UTF-8, com um objeto JSON por linha. O Git ignora esse arquivo.
-
-- `request` contém o modelo, o prompt de sistema, o histórico, as definições das ferramentas, os resultados já consultados e as opções enviadas ao Ollama.
-- `response` contém a resposta original do Ollama, inclusive chamadas de ferramentas com seus argumentos, antes de o agente decidir o que mostrar no chat. O mesmo `request_id` liga a resposta à requisição.
-
-Para acompanhar as últimas chamadas pelo PowerShell, depois de fazer uma pergunta:
-
-```powershell
-Get-Content -Encoding UTF8 .\conversas.log -Tail 6 -Wait
-```
-
-## Simular alteração de disponibilidade
-
-Somente o script externo modifica a coluna `quantidade_disponivel`. Por exemplo:
-
-```bash
-python update_availability.py "NVIDIA A100" 2
-```
-
-Depois, pergunte ao agente quantas A100 estão disponíveis: a consulta deverá usar o novo valor. A memória de cada GPU e os nomes dos modelos permanecem inalterados.
-
-## Testes automatizados (sem LLM)
+Os testes automatizados cobrem o banco, as ferramentas e a orquestração com respostas simuladas do Ollama. Eles rodam sem o serviço e sem baixar o modelo.
 
 ```bash
 python -m unittest discover -s tests -v
 ```
-
-Esses testes verificam a inicialização, os registros, os aliases dos modelos, a disponibilidade, atualizações externas, o modo somente leitura e um ciclo de Tool Calling **simulado**. Não demonstram, por si só, que um modelo real já foi avaliado. Essa etapa dependerá da escolha dos modelos candidatos.
-
-## Exemplos de perguntas
-
-- Quais GPUs estão disponíveis?
-- Qual a memória da A100 e da H100?
-- Quantas RTX 4090 estão disponíveis?
-- Existem duas A100 disponíveis?
-- Quantas GPUs estão disponíveis no total?
-- Quais GPUs têm pelo menos 48 GB?
-- Quantas GPUs estão em uso? *(a resposta correta deve indicar que esse dado não está disponível)*
-
-## Organização
-
-```text
-hp-gpu-assistant/
-├── app.py                       # Chat via navegador
-├── chat_cli.py                  # Chat via terminal
-├── init_db.py                   # Cria e popula o SQLite
-├── update_availability.py       # Atualização administrativa separada
-├── gpu_assistant/
-│   ├── agent.py                 # Orquestração e Tool Calling
-│   ├── config.py                # Variáveis de configuração
-│   ├── database.py              # Acesso ao SQLite
-│   └── tools.py                 # Ferramentas de consulta
-├── tests/                       # Testes offline
-├── data/                        # SQLite local (não versionado)
-├── .env.example
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
-## Decisões e limitações
-
-- **SQLite:** são apenas cinco modelos e consultas locais; não precisamos manter um servidor PostgreSQL.
-- **Sem treinamento/fine-tuning:** o desafio trata da integração do LLM com dados externos, não de memorizar dados mutáveis.
-- **Modelo configurável:** permite avaliar precisão de Tool Calling, tempo de resposta e consumo de recursos antes de escolher um modelo final.
-- **Somente leitura no agente:** operações de escrita ficam em um script separado.
-- **Sem reservas:** não existe no enunciado uma regra de reserva, agenda ou utilização; não fabricamos esses dados.
-- **Interface simples:** o frontend é complementar à integração com o modelo.
-- **Respostas factuais:** o LLM interpreta a pergunta, seleciona as consultas e escreve a mensagem usando os dados retornados.
-
-## Referências técnicas
-
-- [Ollama — instalação e quickstart](https://docs.ollama.com/quickstart)
-- [Ollama — Tool Calling](https://docs.ollama.com/capabilities/tool-calling)
-- [SQLite — quando utilizar](https://www.sqlite.org/whentouse.html)
-
