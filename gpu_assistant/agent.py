@@ -50,11 +50,14 @@ class GpuAgent:
         "- `user` identifica mensagens do cliente.\n"
         "- `assistant` identifica mensagens e chamadas de ferramentas da LLM.\n"
         "- `tool` identifica resultados das ferramentas.\n"
-        "Use o histórico para interpretar referências no pedido atual.\n\n"
+        "Use o histórico para interpretar referências no pedido atual, como o modelo de GPU "
+        "e a quantidade que o cliente solicitou.\n\n"
         "## Turno atual\n"
         "Responda ao bloco «Última mensagem do cliente». As chamadas e resultados que vêm depois "
-        "desse bloco pertencem ao turno atual. Consulte dados de GPUs apenas quando forem "
-        "necessários para responder ao pedido atual."
+        "desse bloco pertencem ao turno atual. A quantidade de GPUs livres no banco pode mudar entre perguntas. "
+        "Para responder sobre disponibilidade, sempre chame uma ferramenta de consulta ao estoque neste turno, "
+        "mesmo quando a pergunta for repetida ou o cliente pedir confirmação de uma resposta anterior. "
+        "Aguarde o resultado e use somente os dados dessa consulta para informar a disponibilidade."
     )
 
     CURRENT_USER_HEADER = "## Última mensagem do cliente\n\n"

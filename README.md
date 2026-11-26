@@ -4,10 +4,10 @@
 
 ## Decisões do projeto
 
-- **Python e SQLite.** Python concentra a integração com o modelo, a validação dos argumentos e a execução das consultas. Com cinco modelos de GPU, SQLite oferece persistência em um arquivo local.
-- **Ollama e execução local.** Consideramos a API da OpenAI e escolhemos rodar um modelo local. Começamos com o Llama 3.2 3B e passamos para o **Qwen3 4B (`qwen3:4b`)** após observar, nos testes locais, respostas mais coerentes a saudações e perguntas sobre o papel do assistente. O modelo continua configurável para comparar a seleção de ferramentas e o tempo de resposta.
-- **Estoque somente leitura para o agente.** O Python abre o SQLite em modo de leitura nas consultas. Um script separado altera a quantidade disponível para demonstrar como o agente responde a mudanças no estoque.
-- **Duas interfaces para o mesmo agente.** O Streamlit oferece chat no navegador e mostra o modelo em uso e os totais na barra lateral. A CLI permite testar o mesmo fluxo pelo terminal, inclusive com outro modelo já baixado.
+- **Python e SQLite.** Python foi utilizado para integrar o modelo, validar os argumentos e executar as consultas. O SQLite foi adotado para armazenar o estoque dos cinco modelos de GPU em um arquivo local.
+- **Ollama e execução local.** Após considerar a API da OpenAI, optou-se pela execução local com Ollama. Inicialmente, foi utilizado o Llama 3.2 3B. Nos testes locais, o **Qwen3 4B (`qwen3:4b`)** apresentou respostas mais coerentes a saudações e perguntas sobre o papel do assistente e passou a ser o modelo padrão. A configuração permite testar outros modelos e comparar a seleção de ferramentas e o tempo de resposta.
+- **Estoque somente leitura para o agente.** O acesso do agente ao SQLite foi limitado a consultas em modo somente leitura. Um script separado permite alterar a quantidade disponível e demonstrar como o agente responde a mudanças no estoque.
+- **Duas interfaces para o mesmo agente.** Foi implementado um chat em Streamlit, com o modelo em uso e os totais na barra lateral. A interface de linha de comando (CLI) permite testar o mesmo fluxo pelo terminal, inclusive com outro modelo já baixado.
 
 ## Dados e escopo
 
@@ -25,25 +25,27 @@ A base inicial tem **cinco modelos e 19 unidades livres**.
 
 ## Como o agente funciona
 
-O [agente Python](gpu_assistant/agent.py) envia ao Ollama o contexto da conversa e os esquemas das ferramentas autorizadas. Quando o modelo pede uma consulta, o agente valida o nome e os argumentos, executa a função e devolve o resultado ao modelo. Se a consulta falhar, o agente envia um diagnóstico e permite até três tentativas de correção no turno. A resposta pode vir como texto ou pela ferramenta `conversar_com_cliente`.
+O agente Python envia ao Ollama o contexto da conversa e os esquemas das ferramentas autorizadas. O modelo decide quando consultar o estoque e qual ferramenta usar. Quando o modelo pede uma consulta, o agente valida a chamada, consulta o SQLite e devolve o resultado ao modelo. O modelo redige a resposta e pode entregá-la em texto ou pela ferramenta `conversar_com_cliente`. [Código do agente](gpu_assistant/agent.py)
 
-O prompt define o papel do assistente, o uso do histórico e o limite sobre reservas. As [descrições das ferramentas](gpu_assistant/tools.py) especificam o que cada função recebe e devolve. Essa separação permite ajustar a seleção de ferramentas sem alterar as consultas ao banco.
+Foram usadas expressões regulares (regex) para reconhecer valores enviados como texto, como `"2"` e `"true"`, e convertê-los para inteiro ou booleano conforme o esquema da ferramenta. Se uma chamada falhar, o agente devolve ao modelo um diagnóstico com os argumentos recebidos e os tipos esperados. O modelo tem até três tentativas de correção por turno. Ao esgotar esse limite, o agente pede ao modelo que explique o que ficou sem confirmação.
+
+O prompt define o papel do assistente, o uso do histórico e o limite sobre reservas. Em perguntas sobre disponibilidade, o modelo é orientado a consultar o estoque no turno atual. O esquema de cada ferramenta descreve o que ela recebe e devolve. As descrições ficam separadas da lógica das consultas e podem ser ajustadas para orientar a seleção de ferramentas. [Esquemas das ferramentas](gpu_assistant/tools.py)
 
 | Ferramenta | Finalidade |
 | --- | --- |
 | `consultar_gpus` | Lista modelos ou retorna memória por unidade e quantidade livre por modelo. Aceita filtros por nome, memória ou presença de unidades livres. |
-| `verificar_disponibilidade` | Recebe um modelo e uma quantidade. Retorna o número de unidades livres e `atende_solicitacao`, que indica se há pelo menos a quantidade pedida. |
+| `verificar_disponibilidade` | Recebe um modelo e uma quantidade. Para um modelo cadastrado, retorna o número de unidades livres e `atende_solicitacao`, que indica se há pelo menos a quantidade pedida. |
 | `consultar_resumo` | Conta os modelos cadastrados e soma as unidades livres. |
 | `comparar_gpus` | Encontra a maior ou a menor memória por unidade, ou a maior ou a menor disponibilidade, incluindo empates. |
-| `conversar_com_cliente` | Entrega uma mensagem, como uma saudação, uma resposta final ou um pedido de esclarecimento. |
+| `conversar_com_cliente` | Entrega a mensagem escrita pelo modelo, como uma saudação, uma resposta final ou um pedido de esclarecimento. |
 
 ## Como executar
 
 É preciso ter **Python 3.10 ou superior** e [Ollama](https://ollama.com/download) instalado. O [Qwen3 4B](https://ollama.com/library/qwen3:4b) usa a memória e o processamento do computador local. A velocidade varia conforme o hardware.
 
-### Ambiente usado nos testes locais
+### Ambiente dos testes locais
 
-O Qwen3 4B foi testado no **Windows 11 25H2** com **Intel Core i7-11800H**, **16 GB de RAM**, **NVIDIA GeForce GTX 1650 com 4 GB de VRAM** e **Ollama 0.40.16**. Nessa máquina, o Ollama distribuiu o modelo entre a CPU e a GPU.
+Os testes locais com o Qwen3 4B foram realizados no **Windows 11 25H2** com **Intel Core i7-11800H**, **16 GB de RAM**, **NVIDIA GeForce GTX 1650 com 4 GB de VRAM** e **Ollama 0.40.16**. Nessa máquina, o Ollama distribuiu o modelo entre a CPU e a GPU. Durante os testes manuais, algumas respostas levaram dezenas de segundos.
 
 ### 1. Prepare o ambiente
 
@@ -98,13 +100,15 @@ python chat_cli.py
 
 Comece com “Quais GPUs estão disponíveis?”. Em seguida, compare “Quantas A100 estão livres?” com “Tem duas A100 livres?”. A primeira pergunta pede o total do modelo. A segunda verifica se o estoque atende a uma quantidade específica. Pergunte “E se forem cinco?” no mesmo chat para testar o uso do histórico. Para conferir o escopo, pergunte se o assistente pode reservar uma GPU.
 
-Para simular uma mudança, rode o comando abaixo em outro terminal com o ambiente virtual ativo. Ele define a disponibilidade da A100 em duas unidades. Depois, pergunte novamente pelo total de A100 livres.
+Para testar uma mudança de estoque, parta da base inicial, com quatro A100 livres. Pergunte “Tem duas A100 livres?” e confira se a resposta indica estoque suficiente. Em outro terminal, com o ambiente virtual ativo, reduza o estoque para uma unidade.
 
 ```bash
-python update_availability.py A100 2
+python update_availability.py A100 1
 ```
 
-As duas interfaces registram requisições e respostas do Ollama em `conversas.log`, na raiz do projeto. Os registros em JSON incluem o modelo, o histórico enviado, as chamadas de ferramentas, os argumentos e as métricas retornadas pelo Ollama. Cada par de requisição e resposta compartilha o mesmo `request_id`. Nos testes manuais, esse log permite conferir se uma resposta correta veio da ferramenta esperada.
+Repita a pergunta no mesmo chat. A resposta esperada indica uma A100 livre, quantidade insuficiente para o pedido. No teste manual com o Qwen3 4B, o log registrou uma chamada a `verificar_disponibilidade` em cada turno, e as respostas refletiram a mudança de estoque.
+
+As duas interfaces registram requisições e respostas do Ollama em `conversas.log`, na raiz do projeto. Os registros em JSON incluem o modelo, o histórico enviado, as chamadas de ferramentas, os argumentos e as métricas retornadas pelo Ollama. Cada par de requisição e resposta compartilha o mesmo `request_id`.
 
 Os testes automatizados cobrem o banco, as ferramentas e a orquestração com respostas simuladas do Ollama. Eles rodam sem o serviço e sem baixar o modelo.
 
